@@ -1,1 +1,61 @@
+name: Build GBA ROM
 
+on:
+  push:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    container: devkitpro/devkitarm:latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install GBA libraries and music tools
+        run: |
+          dkp-pacman -Sy --noconfirm gba-dev
+          export PATH="$DEVKITARM/bin:$DEVKITPRO/tools/bin:$PATH"
+          command -v mmutil >/dev/null 2>&1 || dkp-pacman -S --noconfirm mmutil
+          command -v mmutil
+          command -v gbafix
+
+      - name: Convert the music
+        run: |
+          export PATH="$DEVKITARM/bin:$DEVKITPRO/tools/bin:$PATH"
+          mkdir -p build
+          XM=$(find . -maxdepth 2 -name '*.xm' | head -n 1)
+          if [ -z "$XM" ]; then echo "No .xm file found in the repo"; exit 1; fi
+          echo "Using music file: $XM"
+          cp "$XM" build/song.xm
+          mmutil build/song.xm -obuild/soundbank.bin -hbuild/soundbank.h
+          printf '    .section .rodata\n    .balign 4\n    .global soundbank_bin\nsoundbank_bin:\n    .incbin "build/soundbank.bin"\n' > build/soundbank_data.s
+          arm-none-eabi-gcc -c build/soundbank_data.s -o build/soundbank_data.o
+          ls -l build
+
+      - name: Build the ROM
+        run: |
+          export PATH="$DEVKITARM/bin:$DEVKITPRO/tools/bin:$PATH"
+          arm-none-eabi-gcc -mthumb -mthumb-interwork -O2 -Wall \
+            -I"$DEVKITPRO/libgba/include" -Ibuild \
+            -specs=gba.specs main.c build/soundbank_data.o \
+            -L"$DEVKITPRO/libgba/lib" -lmm -lgba \
+            -o build/game.elf
+          arm-none-eabi-objcopy -O binary build/game.elf build/game.gba
+          gbafix build/game.gba
+          ls -l build
+
+      - name: Keep a copy with the run
+        uses: actions/upload-artifact@v4
+        with:
+          name: game-rom
+          path: build/game.gba
+
+      - name: Publish as a release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: latest
+          name: Latest ROM
+          files: build/game.gba
