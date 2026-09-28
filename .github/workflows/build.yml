@@ -26,9 +26,12 @@ jobs:
         run: |
           export PATH="$DEVKITARM/bin:$DEVKITPRO/tools/bin:$PATH"
           mkdir -p build
-          XM=$(find . -maxdepth 2 -name '*.xm' | head -n 1)
-          if [ -z "$XM" ]; then echo "No .xm file found in the repo"; exit 1; fi
+          # Always use the GBA-optimised song. (The repo also holds the original
+          # full-quality .xm; picking "the first .xm found" could build that one instead.)
+          XM=the_dipper_man_gba.xm
+          if [ ! -f "$XM" ]; then echo "Missing $XM in the repo root"; exit 1; fi
           echo "Using music file: $XM"
+          md5sum "$XM"
           cp "$XM" build/song.xm
           mmutil build/song.xm -obuild/soundbank.bin -hbuild/soundbank.h
           printf '    .section .rodata\n    .balign 4\n    .global soundbank_bin\nsoundbank_bin:\n    .incbin "build/soundbank.bin"\n' > build/soundbank_data.s
