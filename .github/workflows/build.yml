@@ -16,7 +16,14 @@ jobs:
 
       - name: Install GBA libraries and music tools
         run: |
-          dkp-pacman -Sy --noconfirm gba-dev
+          # The devkitPro package mirror occasionally times out
+          # ("Operation too slow") on GitHub-hosted runners. Retry a few
+          # times with a short pause before giving up for real.
+          for i in 1 2 3 4 5; do
+            dkp-pacman -Sy --noconfirm gba-dev && break
+            echo "pacman sync failed (attempt $i/5), retrying in 15s..."
+            sleep 15
+          done
           export PATH="$DEVKITARM/bin:$DEVKITPRO/tools/bin:$PATH"
           command -v mmutil >/dev/null 2>&1 || dkp-pacman -S --noconfirm mmutil
           command -v mmutil
